@@ -7,9 +7,7 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-SYSTEM_PROMPT = """أنت مساعد مبيعات وخدمة عملاء ذكي لكتاب 'قسوة النبلاء'. 
-مهمتك الإجابة على استفسارات العميل بلباقة وتشويق، ومساعدته في شراء الكتاب عبر النجوم أو موقع Getly.
-كن محفزاً ومختصراً."""
+SYSTEM_PROMPT = """أنت مساعد مبيعات وخبير ذكي لكتاب 'قسوة النبلاء'. أجب عن أسئلة المستخدم بأسلوب إقناعي، ودود، واحترافي باللغة العربية."""
 
 def get_groq_response(user_text):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -18,36 +16,42 @@ def get_groq_response(user_text):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama3-8b-8192",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text}
         ]
     }
     try:
-        res = requests.post(url, json=payload, headers=headers).json()
-        return res['choices'][0]['message']['content']
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            return "عذراً، حدث خطأ أثناء الاتصال بنظام الذكاء الاصطناعي."
     except Exception as e:
-        return "أهلاً بك! أنا مساعد كتاب قسوة النبلاء، كيف يمكنني مساعدتك اليوم؟"
+        return "عذراً، حدث خطأ في الاتصال بالشبكة."
+
+@app.route("/", methods=["GET"])
+def home():
+    return "Bot is running!"
 
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 def telegram_webhook():
     data = request.get_json()
     if "message" in data and "text" in data["message"]:
         chat_id = data["message"]["chat"]["id"]
-        text = data["message"]["text"]
-        
-        reply = get_groq_response(text)
-        
+        user_text = data["message"]["text"]
+
+        if user_text.strip() == "/start":
+            reply_text = "أهلاً بك! أنا مساعدك الذكي لكتاب قسوة النبلاء. كيف يمكنني مساعدتك اليوم؟"
+        else:
+            reply_text = get_groq_response(user_text)
+
         send_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(send_url, json={"chat_id": chat_id, "text": reply})
-        
+        requests.post(send_url, json={"chat_id": chat_id, "text": reply_text})
+
     return "OK", 200
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running!", 200
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-  
+    app.run(host="0.0.0.0", port=10000)
+    
